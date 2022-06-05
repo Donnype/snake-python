@@ -82,16 +82,16 @@ def advance(game: Game):
     head, *body, tail = game.snake
 
     if game.snake_direction == "up":
-        new_head = Position(x=head.x, y=head.y - 1 % game.board_size)
+        new_head = Position(head.x, (head.y - 1) % game.board_size)
 
     if game.snake_direction == "down":
-        new_head = Position(x=head.x, y=head.y + 1 % game.board_size)
+        new_head = Position(head.x, (head.y + 1) % game.board_size)
 
     if game.snake_direction == "left":
-        new_head = Position(x=head.x - 1 % game.board_size, y=head.y)
+        new_head = Position((head.x - 1) % game.board_size, head.y)
 
     if game.snake_direction == "right":
-        new_head = Position(x=head.x + 1 % game.board_size, y=head.y)
+        new_head = Position((head.x + 1) % game.board_size, head.y)
 
     assert new_head not in body, "Game over!"
 
@@ -115,7 +115,7 @@ def main_loop(step_size):
             game = advance(game)
         except AssertionError:
             print("\n\nGAME OVER\n")
-            print(f"Points: {len(game.snake) + 1}\n\n")  # The snake is missing its new head at this stage
+            print(f"Points: {len(game.snake)}\n\n")
             break
 
         board = board_from_game(game)
@@ -185,10 +185,11 @@ if __name__ == "__main__":
 
     game = Game(
         snake=snake,
-        snake_direction="down",
+        snake_direction="up",
         apple=new_apple(snake, board_size),
         board_size=board_size,
     )
 
     Thread(target=main_with_step).start()
     Thread(target=key_listener).start()
+
