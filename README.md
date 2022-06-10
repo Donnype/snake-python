@@ -1,5 +1,5 @@
 # snake-python
-Vanilla python implementation of snake under 200 lines.
+Vanilla python implementation of snake under 100 lines.
 
 Run the game:
 ```python
