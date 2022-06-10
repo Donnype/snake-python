@@ -1,5 +1,5 @@
 # snake-python
-Bare python implementation of snake under 200 lines on macOS
+Vanilla python implementation of snake under 200 lines.
 
 Run the game:
 ```python
