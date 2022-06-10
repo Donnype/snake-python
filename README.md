@@ -3,7 +3,7 @@ Vanilla python implementation of snake under 200 lines.
 
 Run the game:
 ```python
-python -m snake.py
+python -m snake
 ```
 
 ## Impressions
