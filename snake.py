@@ -1,28 +1,18 @@
-import os
-import random
-import sys
-import termios
-import time
-import tty
+import os, random, sys, termios, time, tty
 from dataclasses import dataclass
 from enum import Enum
 from threading import Thread
-from typing import List
+from typing import List, Tuple, Optional
 
+tattr = termios.tcgetattr(sys.stdin.fileno()) 
+tty.setcbreak(sys.stdin.fileno(), termios.TCSANOW)  # Disable stdin line buffering
 
 class CHAR(Enum):
-    HEAD = "\033[1;34mO\033[0m"
+    HEAD = "\033[1;34mO\033[0m"  # Some coloring
     BODY = "\033[1;34mo\033[0m"
     APPLE = "\033[0;31mA\033[0m"
-
     BOARDER = "\033[0;36m#\033[0m"
     EMPTY = " "
-
-
-@dataclass
-class Board:
-    data: List[List[str]]
-
 
 @dataclass
 class Position:
@@ -32,6 +22,8 @@ class Position:
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
 
+    def translate(self, translation: Tuple[int, int], mod: int):
+        return Position((self.x + translation[0]) % mod, (self.y + translation[1]) % mod)
 
 @dataclass
 class Game:
@@ -40,156 +32,68 @@ class Game:
     apple: Position
     board_size: int
 
-
-def determine_char(position: Position, game: Game):
-    if position == game.apple:
-        return CHAR.APPLE
-
+def determine_character_to_write(position: Position, game: Game) -> CHAR:
     for i, segment in enumerate(game.snake):
         if position == segment:
             return CHAR.HEAD if i == 0 else CHAR.BODY
 
-    return CHAR.EMPTY
+    return CHAR.APPLE if position == game.apple else CHAR.EMPTY
 
-
-def board_from_game(game: Game):
-    data = []
+def print_game(game: Game):
+    content = (game.board_size + 2) * CHAR.BOARDER.value + "\n"
 
     for i in range(game.board_size):
-        line = []
-        for j in range(game.board_size):
-            line.append(determine_char(Position(j, i), game).value)
-
-        data.append(line)
-
-    return Board(data=data)
-
-
-def print_board(board: Board):
-    content = (len(board.data[0]) + 2)*CHAR.BOARDER.value + "\n"
-
-    for line in board.data:
+        line = [determine_character_to_write(Position(j, i), game).value for j in range(game.board_size)]
         content += CHAR.BOARDER.value + "".join(line) + CHAR.BOARDER.value + "\n"
 
-    content += (len(board.data[0]) + 2)*CHAR.BOARDER.value
-
-    os.system("clear")
-    sys.stdout.write(content)
-    sys.stdout.flush()
-
+    os.system("clear")  # Clears the "frame"
+    sys.stdout.write(content + (game.board_size + 2) * CHAR.BOARDER.value)  # Writes the new content
 
 def advance(game: Game):
-    head, *body, tail = game.snake
+    old_head, *body, tail = game.snake
+    translations = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 
-    if game.snake_direction == "up":
-        new_head = Position(head.x, (head.y - 1) % game.board_size)
+    new_head = old_head.translate(translations[game.snake_direction], game.board_size)
+    assert new_head not in body  # Else: game over...
 
-    if game.snake_direction == "down":
-        new_head = Position(head.x, (head.y + 1) % game.board_size)
-
-    if game.snake_direction == "left":
-        new_head = Position((head.x - 1) % game.board_size, head.y)
-
-    if game.snake_direction == "right":
-        new_head = Position((head.x + 1) % game.board_size, head.y)
-
-    assert new_head not in body, "Game over!"
-
-    if new_head == game.apple:
+    if new_head == game.apple:  # Snake eats an apple and grows in size
         game.apple = new_apple(game.snake, game.board_size)
         body.append(tail)  # Move snake head to the apple but keep the tail
 
-    return Game(
-        snake=[new_head, head] + body,
-        snake_direction=game.snake_direction,
-        apple=game.apple,
-        board_size=game.board_size,
-    )
+    game.snake = [new_head, old_head] + body
 
-
-def main_loop(step_size):
-    global game
-
+def main_loop(step_size: float):
     while True:
         try:
-            game = advance(game)
+            advance(game)
         except AssertionError:
-            print("\n\nGAME OVER\n")
-            print(f"Points: {len(game.snake)}\n\n")
+            print(f"\n\nGAME OVER\nPoints: {len(game.snake)}\n\n")
             break
 
-        board = board_from_game(game)
-        print_board(board)
+        print_game(game)
         time.sleep(step_size)
 
-
 def key_listener():
-    global game
-   
-    up, down, right, left = "A", "B", "C", "D"  # Arrow characters on macOS
+    char_to_direction = {"A": "up", "B": "down", "C": "right", "D": "left"}  # Arrow characters
+    char_to_forbidden_direction = {"A": "down", "B": "up", "C": "left", "D": "right"}  # Snake cannot turn 180 degrees
 
-    def determine_direction(char: str):
-        if char == up and game.snake_direction != "down":
-            return "up"
-
-        if char == down and game.snake_direction != "up":
-            return "down"
-
-        if char == left and game.snake_direction != "right":
-            return "left"
-
-        if char == right and game.snake_direction != "left":
-            return "right"
-
+    def determine_direction(char):
+        return None if game.snake_direction == char_to_forbidden_direction.get(char) else char_to_direction.get(char)
 
     while True:
-        if not bytes(sys.stdin.read(1), "utf-8") == b"\x1b":  # blocking read call
-            continue
-
-        char = sys.stdin.read(1)
-
-        if not char == "[":
-            continue
-
-        char = sys.stdin.read(1)
-        game.snake_direction = determine_direction(char) or game.snake_direction
-
-
-def random_position(board_size: int) -> Position:
-    return Position(x=random.randint(1, board_size-1), y=random.randint(1, board_size-1))
-
+        if bytes(sys.stdin.read(1), "utf-8") == b"\x1b" and sys.stdin.read(1) == "[":  # blocking arrow key checks
+            game.snake_direction = determine_direction(sys.stdin.read(1)) or game.snake_direction
 
 def new_apple(snake: List[Position], board_size: int) -> Position:
-    apple = random_position(board_size)
+    apple = Position(x=random.randint(1, board_size-1), y=random.randint(1, board_size-1))
 
     while apple in snake:
-        apple = random_position(board_size)
+        apple = Position(x=random.randint(1, board_size-1), y=random.randint(1, board_size-1))
 
     return apple
 
+snake = [Position(i, 3) for i in [2, 3, 4, 5]]
+game = Game(snake=snake, snake_direction="up", apple=new_apple(snake, 25), board_size=25)
 
-if __name__ == "__main__":
-    tattr = termios.tcgetattr(sys.stdin.fileno()) 
-    tty.setcbreak(sys.stdin.fileno(), termios.TCSANOW)  # Disable stdin line buffering
- 
-    board_size = 25
-    snake = [
-        Position(2, 3),
-        Position(3, 3),
-        Position(4, 3),
-        Position(5, 3),
-    ]
-
-    def main_with_step():
-        return main_loop(step_size=0.15)
-
-    game = Game(
-        snake=snake,
-        snake_direction="up",
-        apple=new_apple(snake, board_size),
-        board_size=board_size,
-    )
-
-    Thread(target=main_with_step).start()
-    Thread(target=key_listener).start()
-
+Thread(target=main_loop, kwargs={"step_size": 0.15}).start()
+Thread(target=key_listener).start()
