@@ -4,7 +4,6 @@ from enum import Enum
 from threading import Thread
 from typing import List, Tuple, Optional
 
-tattr = termios.tcgetattr(sys.stdin.fileno()) 
 tty.setcbreak(sys.stdin.fileno(), termios.TCSANOW)  # Disable stdin line buffering
 
 class CHAR(Enum):
@@ -28,15 +27,14 @@ class Position:
 @dataclass
 class Game:
     snake: List[Position]  # First position is the head
-    snake_direction: str
+    snake_direction: str  # up, down, left or right 
     apple: Position
     board_size: int
 
 def determine_character_to_write(position: Position, game: Game) -> CHAR:
-    for i, segment in enumerate(game.snake):
-        if position == segment:
-            return CHAR.HEAD if i == 0 else CHAR.BODY
-
+    if position in game.snake:
+        return CHAR.HEAD if position == game.snake[0] else CHAR.BODY
+    
     return CHAR.APPLE if position == game.apple else CHAR.EMPTY
 
 def print_game(game: Game):
@@ -86,11 +84,8 @@ def key_listener():
 
 def new_apple(snake: List[Position], board_size: int) -> Position:
     apple = Position(x=random.randint(1, board_size-1), y=random.randint(1, board_size-1))
-
-    while apple in snake:
-        apple = Position(x=random.randint(1, board_size-1), y=random.randint(1, board_size-1))
-
-    return apple
+    
+    return apple if apple not in snake else new_apple(snake, board_size)
 
 snake = [Position(i, 3) for i in [2, 3, 4, 5]]
 game = Game(snake=snake, snake_direction="up", apple=new_apple(snake, 25), board_size=25)
